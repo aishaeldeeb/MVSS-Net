@@ -12,6 +12,7 @@ class Datasets(Dataset):
 
         self.input_image_paths = []
         self.mask_image_paths = []
+        self.edge_image_paths = []
         self.labels = []
         
         with open(paths_file, 'r') as f:
@@ -20,14 +21,22 @@ class Datasets(Dataset):
                 parts = l.rstrip().split(' ')
                 self.input_image_paths.append(parts[0])
                 self.mask_image_paths.append(parts[1])
-                self.labels.append(int(parts[2]))
+                self.edge_image_paths.append(parts[2])
+                self.labels.append(int(parts[3]))
 
         # ----------
         #  TODO: Transforms for data augmentation (more augmentations should be added)
         # ----------
-        self.transform = transforms.Compose([
+        self.transform1 = transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((self.image_size, self.image_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.ToTensor()])
+
+        self.transform2 = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((self.image_size // 4, self.image_size // 4)), # specially for edge mask, as the paper uses H/4 and W/4
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.ToTensor()])
@@ -46,9 +55,18 @@ class Datasets(Dataset):
         # ----------
         mask_file_name = self.mask_image_paths[item]
         if (mask_file_name == "None"):
-            mask= np.zeros((height, width), np.uint8) # a totally black mask for real image
+            mask = np.zeros((height, width), np.uint8) # a totally black mask for real image
         else:
             mask = cv2.imread(mask_file_name, cv2.IMREAD_GRAYSCALE)
+
+        # ----------
+        # Read edge
+        # ----------
+        edge_file_name = self.edge_image_paths[item]
+        if (edge_file_name == "None"):
+            edge = np.zeros((height, width), np.uint8) # a totally black edge mask for real image
+        else:
+            edge = cv2.imread(edge_file_name, cv2.IMREAD_GRAYSCALE)
 
         # ----------
         # Apply transform (the same for both image and mask)
@@ -57,13 +75,17 @@ class Datasets(Dataset):
 
         random.seed(seed)
         torch.manual_seed(seed)
-        input = self.transform(torch.tensor(input).permute(2, 0, 1)) # permute is a must, as pytorch accepts [channel, height, width] format instead of [height, width, channel]
+        input = self.transform1(torch.tensor(input).permute(2, 0, 1)) # permute is a must, as pytorch accepts [channel, height, width] format instead of [height, width, channel]
 
         random.seed(seed)
         torch.manual_seed(seed)
-        mask = self.transform(torch.tensor(mask))
+        mask = self.transform1(torch.tensor(mask))
 
-        ret = {'input': input, 'mask': mask, 'label': self.labels[item]}
+        random.seed(seed)
+        torch.manual_seed(seed)
+        edge = self.transform2(torch.tensor(edge))
+
+        ret = {'input': input, 'mask': mask, 'edge': edge, 'label': self.labels[item]}
 
         return ret
 

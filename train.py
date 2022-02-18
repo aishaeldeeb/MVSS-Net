@@ -24,11 +24,15 @@ def dice_loss(gt, out, smooth = 1.0):
 
     return 1.0 - dice
 
+def bgr_to_rgb(t):
+    b, g, r = torch.unbind(t, 1)
+    return torch.stack((r, g, b), 1)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epoch", type=int, default=0, help="epoch to start training from")
     parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
-    parser.add_argument("--paths_file", type=str, default="/dataset/files.txt", help="path to the file with input paths") # each line of this file should contain "/path/to/image.ext /path/to/mask.ext 1 (for fake)/0 (for real)"; for real image.ext, set /path/to/mask.ext as a string None
+    parser.add_argument("--paths_file", type=str, default="/dataset/files.txt", help="path to the file with input paths") # each line of this file should contain "/path/to/image.ext /path/to/mask.ext /path/to/edge.ext 1 (for fake)/0 (for real)"; for real image.ext, set /path/to/mask.ext and /path/to/edge.ext as a string None
     parser.add_argument("--image_size", type=int, default=512, help="size of the images")
     parser.add_argument("--batch_size", type=int, default=12, help="size of the batches") # no default value given by paper
     parser.add_argument("--lr", type=float, default=1e-4, help="adam: learning rate")
@@ -111,6 +115,7 @@ def main():
             # Read from dataloader
             in_imgs = Variable(data["input"].type(Tensor))
             in_masks = Variable(data["mask"].type(Tensor))
+            in_edges = Variable(data["edge"].type(Tensor))
             in_labels = Variable(data["label"].type(Tensor))
 
             # ------------------
@@ -127,10 +132,12 @@ def main():
             # Pixel-scale loss
             loss_seg = dice_loss(in_masks, out_masks)
 
-            # TODO: Edge loss
-            loss_edg = 0.0
+            # Edge loss
+            # TODO: is it the same as the paper?
+            loss_edg = dice_loss(in_edges, out_edges)
 
-            # Image-scale loss (with GMP), TODO: GeM from MVSS-Net++
+            # Image-scale loss (with GMP)
+            # TODO: GeM from MVSS-Net++
             gmp = nn.MaxPool2d(args.image_size)
             out_labels = gmp(out_masks).squeeze()
             loss_clf = criterion_clf(in_labels, out_labels)
@@ -175,10 +182,17 @@ def main():
                 writer.add_scalar("Loss/Pixel-scale", weighted_loss_seg, curr_steps)
                 writer.add_scalar("Loss/Edge", weighted_loss_edg, curr_steps)
                 writer.add_scalar("Loss/Image-scale", weighted_loss_clf, curr_steps)
-                writer.add_images('Input Img', in_imgs, epoch * len(dataloader) + step)
+
+                in_imgs_rgb = bgr_to_rgb(in_imgs.clone().detach())
+                writer.add_images('Input Img', in_imgs_rgb, epoch * len(dataloader) + step)
+
                 writer.add_images('Input Mask', in_masks, epoch * len(dataloader) + step)
                 writer.add_images('Output Mask', out_masks, epoch * len(dataloader) + step)
+                writer.add_images('Input Edge', in_edges, epoch * len(dataloader) + step)
+                writer.add_images('Output Edge', out_edges, epoch * len(dataloader) + step)
 
+            # save model parameters
+            # TODO: you can change when the parameters are saved
             if step % args.checkpoint_interval == 0:
                 tm = datetime.now().strftime("%Y%m%d%H%M%S")
                 torch.save(model.state_dict(),
@@ -208,9 +222,14 @@ def main():
             writer.add_scalar("Epoch Loss/Pixel-scale", epoch_avg_seg, epoch)
             writer.add_scalar("Epoch Loss/Edge", epoch_avg_edg, epoch)
             writer.add_scalar("Epoch Loss/Image-scale", epoch_avg_clf, epoch)
-            writer.add_images('Epoch Input Img', in_imgs, epoch)
+
+            in_imgs_rgb = bgr_to_rgb(in_imgs.clone().detach())
+            writer.add_images('Epoch Input Img', in_imgs_rgb, epoch)
+
             writer.add_images('Epoch Input Mask', in_masks, epoch)
             writer.add_images('Epoch Output Mask', out_masks, epoch)
+            writer.add_images('Epoch Input Edge', in_edges, epoch)
+            writer.add_images('Epoch Output Edge', out_edges, epoch)
     
     print("Finished training")
 
