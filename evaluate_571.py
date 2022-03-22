@@ -152,12 +152,6 @@ if __name__ == '__main__':
                 continue
 
             seg = (seg > args.threshold).astype(np.float)
-
-            # save prediction
-            seg_2 = seg * 255.0
-            save_seg_path = os.path.join(args.out_dir, 'pred_' + os.path.basename(img_path).split('.')[0] + '_2.png')
-            cv2.imwrite(save_seg_path, seg_2.astype(np.uint8))
-
             
             # pixel-level F1
             f1, _, _ = calculate_pixel_f1(seg.flatten(), gt.flatten())
