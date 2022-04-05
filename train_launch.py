@@ -9,7 +9,7 @@ from train_base import *
 
 # constants
 SYNC = False
-GET_MODULE = False
+GET_MODULE = True
 
 def main():
     args = parse_args()
