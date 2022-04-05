@@ -2,6 +2,10 @@ import horovod.torch as hvd
 
 from train_base import *
 
+# constants
+SYNC = True
+GET_MODULE = False
+
 def main():
     args = parse_args()
 
@@ -19,7 +23,7 @@ def main():
     train_sampler, dataloader = init_dataset(args, global_rank, world_size)
     val_sampler, val_dataloader = init_dataset(args, global_rank, world_size, True)
 
-    model = load_dicts(args, True, model)
+    model = load_dicts(args, GET_MODULE, model)
 
     optimizer = init_optims(args, world_size, model)
 
@@ -31,7 +35,7 @@ def main():
     # Boardcast
     hvd.broadcast_parameters(model.state_dict(), root_rank=0)
 
-    train(args, global_rank, True, # hvd
+    train(args, global_rank, SYNC, GET_MODULE,
             model,
             train_sampler, dataloader, val_sampler, val_dataloader,
             optimizer,

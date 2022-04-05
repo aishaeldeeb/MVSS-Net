@@ -153,13 +153,13 @@ def init_schedulers(args, dataloader,
     
     return lr_scheduler
 
-def load_dicts(args, hvd,
+def load_dicts(args, get_module,
                 model):
     # Load pretrained models
     if args.load_path != None and args.load_path != 'timm':
         print('Load pretrained model: {}'.format(args.load_path))
 
-        if (hvd):
+        if (not get_module):
             model.load_state_dict(torch.load(args.load_path))
         else:
             model.module.load_state_dict(torch.load(args.load_path))
@@ -219,7 +219,7 @@ def predict_loss(args, data, model,
     return loss, weighted_loss_seg, weighted_loss_clf, weighted_loss_edg, in_imgs, in_masks, in_edges, out_masks, out_edges
 
 
-def train(args, global_rank, hvd,
+def train(args, global_rank, sync, get_module,
             model,
             train_sampler, dataloader, val_sampler, val_dataloader,
             optimizer,
@@ -271,7 +271,7 @@ def train(args, global_rank, hvd,
 
             model.train()
 
-            if (hvd): optimizer.synchronize()
+            if (sync): optimizer.synchronize()
             optimizer.zero_grad()
 
             loss, weighted_loss_seg, weighted_loss_clf, weighted_loss_edg, in_imgs, in_masks, in_edges, out_masks, out_edges = predict_loss(args, data, model, criterion_BCE, gmp)
@@ -315,7 +315,7 @@ def train(args, global_rank, hvd,
 
             # save model parameters
             if step % args.checkpoint_interval == 0 and global_rank == 0:
-                save_checkpoints(checkpoint_dir, args.id, epoch, step, not hvd, # if hvd, get_module = False
+                save_checkpoints(checkpoint_dir, args.id, epoch, step, get_module,
                                  model)
 
         # ------------------
@@ -378,7 +378,7 @@ def train(args, global_rank, hvd,
             # save model parameters
             if global_rank == 0:
                 save_checkpoints(checkpoint_dir, args.id, epoch, 'end', # set step to a string 'end'
-                                 not hvd, # if hvd, get_module = False
+                                 get_module,
                                  model)
 
         # check early_stopping
