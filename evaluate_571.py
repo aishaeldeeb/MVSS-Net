@@ -3,9 +3,9 @@ import cv2
 import numpy as np
 import sys
 import argparse
-from sklearn import metrics
+from sklearn.metrics import roc_auc_score, roc_curve, ConfusionMatrixDisplay
 from tqdm import tqdm
-import pickle
+from matplotlib import pyplot as plt
 
 import torch
 import torchvision.transforms as transforms
@@ -52,6 +52,34 @@ def calculate_img_score(pd, gt):
     spe = true_neg / (true_neg + false_pos + 1e-6)
     f1 = 2 * sen * spe / (sen + spe)
     return acc, sen, spe, f1, true_pos, true_neg, false_pos, false_neg
+
+def save_cm(y_true, y_pred, save_path):
+    plt.figure()
+    ConfusionMatrixDisplay.from_predictions(y_true, y_pred)
+    plt.tight_layout()
+    
+    plt.savefig(save_path, dpi=300)
+
+def save_auc(y_true, scores, save_path):
+    fpr, tpr, _ = roc_curve(y_true, scores, pos_label=1)
+
+    plt.figure()
+    
+    plt.plot(
+        fpr,
+        tpr,
+        label="ROC curve",
+        )
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("Receiver Operating Characteristic")
+    plt.legend(loc="lower right")
+
+    plt.tight_layout()
+    
+    plt.savefig(save_path, dpi=300)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Evaluation')
@@ -159,21 +187,22 @@ if __name__ == '__main__':
             f1s[lab].append(f1)
 
     # image-level AUC
-    fpr, tpr, thresholds = metrics.roc_curve((np.array(labs) > 0).astype(np.int), scores, pos_label=1)
-    try:
-        img_auc = metrics.roc_auc_score((np.array(labs) > 0).astype(np.int), scores)
-    except:
-        print("only one class")
-        img_auc = 0.0
-    
-    with open(os.path.join(args.out_dir, 'roc.pkl'), 'wb') as f:
-        pickle.dump({'fpr': fpr, 'tpr': tpr, 'th': thresholds, 'auc': img_auc}, f)
-        print("roc save at %s" % (os.path.join(args.out_dir, 'roc.pkl')))
+    y_true = (np.array(labs) > args.threshold).astype(int)
+    y_pred = (np.array(scores) > args.threshold).astype(int)
+
+    save_path = os.path.join(args.out_dir, 'auc.png')
+    save_auc(y_true, scores, save_path)
+
+    img_auc = roc_auc_score(y_true, scores)
 
     meanf1 = np.mean(f1s[0] + f1s[1])
     print("pixel-f1: %.4f" % meanf1)
 
-    acc, sen, spe, f1_imglevel, tp, tn, fp, fn = calculate_img_score((np.array(scores) > 0.5), (np.array(labs) > 0).astype(np.int))
+    acc, sen, spe, f1_imglevel, tp, tn, fp, fn = calculate_img_score(y_pred, y_true)
     print("img level acc: %.4f sen: %.4f  spe: %.4f  f1: %.4f auc: %.4f"
         % (acc, sen, spe, f1_imglevel, img_auc))
     print("combine f1: %.4f" % (2*meanf1*f1_imglevel/(f1_imglevel+meanf1+1e-6)))
+
+    # confusion matrix
+    save_path = os.path.join(args.out_dir, 'cm.png')
+    save_cm(y_true, y_pred, save_path)
