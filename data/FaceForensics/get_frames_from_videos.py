@@ -10,11 +10,11 @@ ROOT = '/project/6061878/junbinz/FakeMediaDetection/dataset/deepfake/FaceForensi
 
 COMPRESSION = 'c23'
 
-NEW_FPS = 1 # or None if not modified
+NEW_FPS = 5 # or None if not modified
 
-N_REAL = 1
+N_REAL = 6
 
-N_FAKE = 1
+N_FAKE = 2
 RANDOM = False
 
 MASK_THRESHOLD = 5
@@ -126,6 +126,7 @@ def handle_fake_videos(prefix, save_image_path, save_mask_path, save_edge_path):
 
         else:
             list_areas = []
+            list_indices = []
             list_images = []
             list_masks = []
             list_edges = []
@@ -142,6 +143,7 @@ def handle_fake_videos(prefix, save_image_path, save_mask_path, save_edge_path):
 
                 if (len(list_areas) < N_FAKE):
                     list_areas.append(a)
+                    list_indices.append(cnt)
                     list_images.append(image)
                     list_masks.append(mask)
                     list_edges.append(edge)
@@ -149,6 +151,7 @@ def handle_fake_videos(prefix, save_image_path, save_mask_path, save_edge_path):
                     for i in range(N_FAKE):
                         if (a > list_areas[i]):
                             list_areas[i] = a
+                            list_indices[i] = cnt
                             list_images[i] = image
                             list_masks[i] = mask
                             list_edges[i] = edge
@@ -165,7 +168,7 @@ def handle_fake_videos(prefix, save_image_path, save_mask_path, save_edge_path):
 
             for i in range(len(list_areas)):
                 # save everything
-                save_filename = prefix + '_' + video_filename.replace('.mp4', '') + '_' + str(i) + '.png'
+                save_filename = prefix + '_' + video_filename.replace('.mp4', '') + '_' + str(list_indices[i]) + '.png'
                 cv2.imwrite(os.path.join(save_image_path, save_filename), list_images[i])
                 cv2.imwrite(os.path.join(save_mask_path, save_filename), list_masks[i])
                 cv2.imwrite(os.path.join(save_edge_path, save_filename), list_edges[i])
