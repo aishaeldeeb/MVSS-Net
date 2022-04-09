@@ -30,7 +30,7 @@ def main():
     # Wrap the optimizers
     optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
 
-    lr_scheduler = init_schedulers(args, dataloader, optimizer)
+    lr_scheduler = init_schedulers(args, optimizer)
 
     # Boardcast
     hvd.broadcast_parameters(model.state_dict(), root_rank=0)

@@ -39,7 +39,7 @@ def main():
 
     optimizer = init_optims(args, world_size, model)
 
-    lr_scheduler = init_schedulers(args, dataloader, optimizer)
+    lr_scheduler = init_schedulers(args, optimizer)
 
     train(args, global_rank, SYNC, GET_MODULE,
             model,

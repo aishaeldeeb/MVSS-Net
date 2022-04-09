@@ -45,34 +45,60 @@ def collate_fn(batch):
 
 def parse_args():
     parser = argparse.ArgumentParser()
+
+    ## job
     parser.add_argument("--id", type=int, help="unique ID from Slurm")
     parser.add_argument("--run_name", type=str, default="MVSS-Net", help="run name")
-    parser.add_argument("--cond_epoch", type=int, default=0, help="epoch to start training from")
-    parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
-    parser.add_argument("--n_early", type=int, default=10, help="number of epochs for early stopping")
-    parser.add_argument("--paths_file", type=str, default="/dataset/files.txt", help="path to the file with input paths") # each line of this file should contain "/path/to/image.ext /path/to/mask.ext /path/to/edge.ext 1 (for fake)/0 (for real)"; for real image.ext, set /path/to/mask.ext and /path/to/edge.ext as a string None
-    parser.add_argument("--val_paths_file", type=str, help="path to the validation set")
-    parser.add_argument("--image_size", type=int, default=512, help="size of the images")
-    parser.add_argument("--channels", type=int, default=3, help="number of image channels")
-    parser.add_argument("--n_c_samples", type=int, help="samples per classes (None for non-controlled)")
-    parser.add_argument("--val_n_c_samples", type=int, help="samples per classes for validation set (None for non-controlled)")
-    parser.add_argument("--batch_size", type=int, default=12, help="size of the batches") # no default value given by paper
-    parser.add_argument("--lr", type=float, default=1e-4, help="adam: learning rate")
-    parser.add_argument("--optim", choices=['adam', 'sgd'], default='adam', help="optimizer")
-    parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
-    parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
-    parser.add_argument("--momentum", type=float, default=0.9, help="sgd: momentum of gradient")
-    parser.add_argument("--workers", type=int, default=0, help="number of cpu threads to use during batch generation")
-    parser.add_argument('--decay_epoch', type=int, default=50, help='decay')
-    parser.add_argument("--lambda_seg", type=float, default=0.16, help="pixel-scale loss weight (alpha)")
-    parser.add_argument("--lambda_clf", type=float, default=0.04, help="image-scale loss weight (beta)")
-    parser.add_argument("--log_interval", type=int, default=100, help="interval between saving image samples")
-    parser.add_argument("--checkpoint_interval", type=int, default=1000, help="batch interval between model checkpoints")
-    parser.add_argument('--load_path', type=str, help='pretrained model or checkpoint for continued training')
+
+    ## multiprocessing
     parser.add_argument('--dist_backend', default='nccl', choices=['gloo', 'nccl'], help='multiprocessing backend')
     parser.add_argument('--master_addr', type=str, default="127.0.0.1", help='address')
     parser.add_argument('--master_port', type=int, default=3721, help='address')
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
+
+    ## dataset
+    parser.add_argument("--paths_file", type=str, default="/dataset/files.txt", help="path to the file with input paths") # each line of this file should contain "/path/to/image.ext /path/to/mask.ext /path/to/edge.ext 1 (for fake)/0 (for real)"; for real image.ext, set /path/to/mask.ext and /path/to/edge.ext as a string None
+    parser.add_argument("--val_paths_file", type=str, help="path to the validation set")
+    parser.add_argument("--n_c_samples", type=int, help="samples per classes (None for non-controlled)")
+    parser.add_argument("--val_n_c_samples", type=int, help="samples per classes for validation set (None for non-controlled)")
+
+    parser.add_argument("--workers", type=int, default=0, help="number of cpu threads to use during batch generation")
+
+    parser.add_argument("--image_size", type=int, default=512, help="size of the images")
+    parser.add_argument("--channels", type=int, default=3, help="number of image channels")
+    
+    parser.add_argument("--batch_size", type=int, default=12, help="size of the batches") # no default value given by paper
+
+    # model
+    parser.add_argument('--load_path', type=str, help='pretrained model or checkpoint for continued training')
+
+    # optimizer and scheduler
+    parser.add_argument("--optim", choices=['adam', 'sgd'], default='adam', help="optimizer")
+    parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
+    parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
+    parser.add_argument("--momentum", type=float, default=0.9, help="sgd: momentum of gradient")
+
+    parser.add_argument('--patience', type=int, default=5, help='numbers of epochs to decay for ReduceLROnPlateau scheduler (None to disable)')
+
+    parser.add_argument('--decay_epoch', type=int, help='numbers of epochs to decay for StepLR scheduler (low priority, None to disable)')
+
+    # training
+    parser.add_argument("--lr", type=float, default=1e-4, help="adam: learning rate")
+
+    parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
+
+    parser.add_argument("--cond_epoch", type=int, default=0, help="epoch to start training from")
+    
+    parser.add_argument("--n_early", type=int, default=10, help="number of epochs for early stopping")
+
+    # losses
+    parser.add_argument("--lambda_seg", type=float, default=0.16, help="pixel-scale loss weight (alpha)")
+    parser.add_argument("--lambda_clf", type=float, default=0.04, help="image-scale loss weight (beta)")
+
+    # log
+    parser.add_argument("--log_interval", type=int, default=100, help="interval between saving image samples")
+    parser.add_argument("--checkpoint_interval", type=int, default=1000, help="batch interval between model checkpoints")
+    
     args = parser.parse_args()
 
     return args
@@ -104,7 +130,11 @@ def init_models(args):
     return model
 
 def init_dataset(args, global_rank, world_size, val = False):
-    # Dataset
+    # return None if no validation set provided
+    if (val and args.val_paths_file is None):
+        print('No val set!')
+        return None, None
+    
     dataset = DeepfakeDataset((args.paths_file if not val else args.val_paths_file),
                               args.image_size,
                               (args.n_c_samples if not val else args.val_n_c_samples),
@@ -132,8 +162,10 @@ def init_optims(args, world_size,
     print('Local learning rate is {} ({}/{})!'.format(local_lr, args.lr, world_size))
 
     if (args.optim == 'adam'):
+        print("Using optimizer adam")
         optimizer = torch.optim.Adam(model.parameters(), lr=local_lr, betas=(args.b1, args.b2))
     elif (args.optim == 'sgd'):
+        print("Using optimizer sgd")
         optimizer = torch.optim.SGD(model.parameters(), lr=local_lr, momentum=args.momentum)
     else:
         print("Unrecognized optimizer %s" % args.optim)
@@ -141,15 +173,24 @@ def init_optims(args, world_size,
 
     return optimizer
 
-def init_schedulers(args, dataloader,
-                    optimizer):
-    # Conversion from epoch to step/iter
-    decay_iter = args.decay_epoch * len(dataloader)
+def init_schedulers(args, optimizer):
+    lr_scheduler = None
 
-    # Schedulers
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer,
-                                                                step_size=decay_iter,
-                                                                gamma=0.5)
+    # high priority for ReduceLROnPlateau (validation set required)
+    if (args.val_paths_file and args.patience):
+        print("Using scheduler ReduceLROnPlateau")
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer = optimizer, 
+                                                                  factor = 0.1,
+                                                                  patience = args.patience)
+    # low priority StepLR
+    elif (args.decay_epoch):
+        print("Using scheduler StepLR")
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer = optimizer,
+                                                    step_size = args.decay_epoch,
+                                                    gamma = 0.5)
+    
+    else:
+        print("No scheduler used")
     
     return lr_scheduler
 
@@ -244,9 +285,6 @@ def train(args, global_rank, sync, get_module,
     for epoch in range(args.cond_epoch, args.n_epochs):
 
         train_sampler.set_epoch(epoch)
-        
-        if (val_sampler):
-            val_sampler.set_epoch(epoch)
 
         print('Starting Epoch {}'.format(epoch + 1))
 
@@ -276,10 +314,9 @@ def train(args, global_rank, sync, get_module,
 
             loss, weighted_loss_seg, weighted_loss_clf, weighted_loss_edg, in_imgs, in_masks, in_edges, out_masks, out_edges = predict_loss(args, data, model, criterion_BCE, gmp)
 
-            # backward prop and step
+            # backward prop
             loss.backward()
             optimizer.step()
-            lr_scheduler.step()
 
             # log losses for epoch
             epoch_steps += 1
@@ -300,7 +337,7 @@ def train(args, global_rank, sync, get_module,
                     f"[Image-scale Loss {weighted_loss_clf:.3e}]"
                     f"")
 
-                writer.add_scalar("LearningRate", lr_scheduler.get_last_lr()[0], curr_steps)
+                writer.add_scalar("LearningRate", optimizer.param_groups[0]['lr'], curr_steps)
                 writer.add_scalar("Loss/Total Loss", loss, epoch * len(dataloader) + step)
                 writer.add_scalar("Loss/Pixel-scale", weighted_loss_seg, curr_steps)
                 writer.add_scalar("Loss/Edge", weighted_loss_edg, curr_steps)
@@ -321,7 +358,10 @@ def train(args, global_rank, sync, get_module,
         # ------------------
         #  Validation
         # ------------------
-        if (val_dataloader):
+        if (args.val_paths_file and val_sampler and val_dataloader):
+  
+            val_sampler.set_epoch(epoch)
+
             model.eval()
 
             for step, data in enumerate(val_dataloader):
@@ -340,6 +380,18 @@ def train(args, global_rank, sync, get_module,
                 if (n_last_epochs >= args.n_early):
                     early_stopping = True
 
+        # ------------------
+        #  Step
+        # ------------------
+        if (lr_scheduler):
+            if (args.val_paths_file and args.patience):
+                lr_scheduler.step(epoch_val_loss) # ReduceLROnPlateau
+            elif (args.decay_epoch):
+                lr_scheduler.step() # StepLR
+            else:
+                print("Error in scheduler step")
+                sys.exit()
+
         # --------------
         #  Log Progress (for epoch)
         # --------------
@@ -349,8 +401,13 @@ def train(args, global_rank, sync, get_module,
             epoch_avg_edg = epoch_total_edg / epoch_steps
             epoch_avg_clf = epoch_total_clf / epoch_steps
             epoch_avg_model = epoch_total_model / epoch_steps
-            epoch_val_loss_avg = epoch_val_loss / len(val_dataloader)
-            best_val_loss_avg = best_val_loss / len(val_dataloader)
+
+            if (args.val_paths_file):
+                epoch_val_loss_avg = epoch_val_loss / len(val_dataloader)
+                best_val_loss_avg = best_val_loss / len(val_dataloader)
+            else:
+                epoch_val_loss_avg = 0
+                best_val_loss_avg = 0
 
             print(f"[Epoch {epoch + 1}/{args.n_epochs}]"
                     f"[Epoch Total Loss {epoch_avg_model:.3f}]"
@@ -360,8 +417,7 @@ def train(args, global_rank, sync, get_module,
                     f"[Epoch Val Loss {epoch_val_loss_avg:.3f} (best Val Loss {best_val_loss_avg:.3f} last for {n_last_epochs:d})]"
                     f"")
 
-            writer.add_scalar("Epoch LearningRate", lr_scheduler.get_last_lr()[0],
-                                epoch)
+            writer.add_scalar("Epoch LearningRate", optimizer.param_groups[0]['lr'], epoch)
             writer.add_scalar("Epoch Loss/Total Loss", epoch_avg_model, epoch)
             writer.add_scalar("Epoch Loss/Pixel-scale", epoch_avg_seg, epoch)
             writer.add_scalar("Epoch Loss/Edge", epoch_avg_edg, epoch)
