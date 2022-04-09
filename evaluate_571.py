@@ -6,13 +6,14 @@ import argparse
 from sklearn.metrics import roc_auc_score, roc_curve, ConfusionMatrixDisplay
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+import csv
 
 import torch
 import torchvision.transforms as transforms
 
 from models.mvssnet import get_mvss
 
-def read_paths(paths_file):
+def read_paths(paths_file, subset):
     data = []
 
     with open(paths_file, 'r') as f:
@@ -23,6 +24,9 @@ def read_paths(paths_file):
             mask_image_path = parts[1]
             # parts[2] is the path for edges, skipped
             label = int(parts[3])
+
+            if (subset and subset not in input_image_path):
+                continue
 
             data.append((input_image_path, mask_image_path, label))
 
@@ -88,6 +92,7 @@ def parse_args():
     parser.add_argument('--threshold', type=float, default=0.5)
     parser.add_argument('--load_path', type=str, help='path to the pretrained model', default="ckpt/mvssnet.pth")
     parser.add_argument("--image_size", type=int, default=512, help="size of the images for prediction")
+    parser.add_argument("--subset", type=str, help="evaluation on certain subset")
     args = parser.parse_args()
     return args
 
@@ -120,11 +125,26 @@ if __name__ == '__main__':
     if not os.path.exists(args.paths_file):
         print("%s not exists, quit" % args.paths_file)
         sys.exit()
-    data = read_paths(args.paths_file)
+
+    if (args.subset):
+        print("Evaluation on subset {}".format(args.subset))
+
+    data = read_paths(args.paths_file, args.subset)
+
+    print("Eval set size is {}!".format(len(data)))
 
     # create/reset output folder
     print("predicted maps will be saved in :%s" % args.out_dir)
     os.makedirs(args.out_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.out_dir, 'masks'), exist_ok=True)
+
+    # csv
+    if (args.subset is None):
+        f_csv = open(os.path.join(args.out_dir, 'pred.csv'), 'w')
+        writer = csv.writer(f_csv)
+
+        header = ['Image', 'Score', 'Pred', 'True']
+        writer.writerow(header)
 
     # transforms
     transform = transforms.Compose([
@@ -160,7 +180,7 @@ if __name__ == '__main__':
             seg = cv2.resize(seg, (ori_size[1], ori_size[0])) # the order of size here is important
 
             # save prediction
-            save_seg_path = os.path.join(args.out_dir, 'pred_' + os.path.basename(img_path).split('.')[0] + '.png')
+            save_seg_path = os.path.join(args.out_dir, 'masks', 'pred_' + os.path.basename(img_path).split('.')[0] + '.png')
             cv2.imwrite(save_seg_path, seg.astype(np.uint8))
 
             # convert from image to floating point
@@ -186,14 +206,23 @@ if __name__ == '__main__':
 
             f1s[lab].append(f1)
 
+            # write to csv
+            if (args.subset is None):
+                row = [img_path, score, (score > args.threshold).astype(int), lab]
+                writer.writerow(row)
+
+
     # image-level AUC
     y_true = (np.array(labs) > args.threshold).astype(int)
     y_pred = (np.array(scores) > args.threshold).astype(int)
 
-    save_path = os.path.join(args.out_dir, 'auc.png')
-    save_auc(y_true, scores, save_path)
+    if (args.subset is None):
+        save_path = os.path.join(args.out_dir, 'auc.png')
+        save_auc(y_true, scores, save_path)
 
-    img_auc = roc_auc_score(y_true, scores)
+        img_auc = roc_auc_score(y_true, scores)
+    else:
+        img_auc = 0.0
 
     meanf1 = np.mean(f1s[0] + f1s[1])
     print("pixel-f1: %.4f" % meanf1)
@@ -204,5 +233,7 @@ if __name__ == '__main__':
     print("combine f1: %.4f" % (2*meanf1*f1_imglevel/(f1_imglevel+meanf1+1e-6)))
 
     # confusion matrix
-    save_path = os.path.join(args.out_dir, 'cm.png')
+    save_path = os.path.join(args.out_dir, 'cm' + ('_' + args.subset if args.subset else '') + '.png')
     save_cm(y_true, y_pred, save_path)
+
+    if (args.subset is None): f_csv.close()
