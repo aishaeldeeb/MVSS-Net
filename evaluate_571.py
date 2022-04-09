@@ -134,7 +134,7 @@ if __name__ == '__main__':
     print("Eval set size is {}!".format(len(data)))
 
     # create/reset output folder
-    print("predicted maps will be saved in :%s" % args.out_dir)
+    print("Predicted maps will be saved in :%s" % args.out_dir)
     os.makedirs(args.out_dir, exist_ok=True)
     os.makedirs(os.path.join(args.out_dir, 'masks'), exist_ok=True)
 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
         f_csv = open(os.path.join(args.out_dir, 'pred.csv'), 'w')
         writer = csv.writer(f_csv)
 
-        header = ['Image', 'Score', 'Pred', 'True']
+        header = ['Image', 'Score', 'Pred', 'True', 'Correct']
         writer.writerow(header)
 
     # transforms
@@ -199,7 +199,7 @@ if __name__ == '__main__':
                 print("%s size not match" % img_path)
                 continue
 
-            seg = (seg > args.threshold).astype(np.float)
+            seg = (seg > args.threshold).astype(np.float64)
             
             # pixel-level F1
             f1, _, _ = calculate_pixel_f1(seg.flatten(), gt.flatten())
@@ -208,9 +208,8 @@ if __name__ == '__main__':
 
             # write to csv
             if (args.subset is None):
-                row = [img_path, score, (score > args.threshold).astype(int), lab]
+                row = [img_path, score, (score > args.threshold).astype(int), lab, (score > args.threshold).astype(int) == lab]
                 writer.writerow(row)
-
 
     # image-level AUC
     y_true = (np.array(labs) > args.threshold).astype(int)

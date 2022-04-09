@@ -216,7 +216,7 @@ def save_checkpoints(checkpoint_dir, id, epoch, step, get_module,
         net = model
 
     torch.save(net.state_dict(),
-                os.path.join(checkpoint_dir, str(id) + "_" + str(epoch + 1) + '_' + str(step) + '.pth'))
+                os.path.join(checkpoint_dir, str(id) + "_" + str(epoch) + '_' + str(step) + '.pth'))
 
 # a single step of prediction and loss calculation (same for both training and validating)
 def predict_loss(args, data, model,
