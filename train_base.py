@@ -69,10 +69,10 @@ def parse_args():
     
     parser.add_argument("--batch_size", type=int, default=12, help="size of the batches") # no default value given by paper
 
-    # model
+    ## model
     parser.add_argument('--load_path', type=str, help='pretrained model or checkpoint for continued training')
 
-    # optimizer and scheduler
+    ## optimizer and scheduler
     parser.add_argument("--optim", choices=['adam', 'sgd'], default='adam', help="optimizer")
     parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
@@ -82,7 +82,7 @@ def parse_args():
 
     parser.add_argument('--decay_epoch', type=int, help='numbers of epochs to decay for StepLR scheduler (low priority, None to disable)')
 
-    # training
+    ## training
     parser.add_argument("--lr", type=float, default=1e-4, help="adam: learning rate")
 
     parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
@@ -91,11 +91,11 @@ def parse_args():
     
     parser.add_argument("--n_early", type=int, default=10, help="number of epochs for early stopping")
 
-    # losses
+    ## losses
     parser.add_argument("--lambda_seg", type=float, default=0.16, help="pixel-scale loss weight (alpha)")
     parser.add_argument("--lambda_clf", type=float, default=0.04, help="image-scale loss weight (beta)")
 
-    # log
+    ## log
     parser.add_argument("--log_interval", type=int, default=100, help="interval between saving image samples")
     parser.add_argument("--checkpoint_interval", type=int, default=1000, help="batch interval between model checkpoints")
     
