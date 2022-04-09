@@ -139,7 +139,7 @@ if __name__ == '__main__':
     f1s = [[], []]
 
     with torch.no_grad():
-        for ix, (img_path, mask_path, lab) in enumerate(tqdm(data)):
+        for ix, (img_path, mask_path, lab) in enumerate(tqdm(data, mininterval = 60)):
             img = cv2.imread(img_path)
             ori_size = img.shape
 
