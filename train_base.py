@@ -149,7 +149,7 @@ def init_dataset(args, global_rank, world_size, val = False):
 
     dataloader = DataLoader(dataset=dataset, batch_size=local_batch_size, num_workers=args.workers, pin_memory=True, drop_last=True, sampler=sampler, collate_fn=collate_fn)
 
-    print('{} set size is {}!'.format(('Train' if not val else 'Val'), len(dataloader)))
+    print('{} set size is {}!'.format(('Train' if not val else 'Val'), len(dataloader) * args.batch_size))
 
     return sampler, dataloader
 
@@ -286,7 +286,7 @@ def train(args, global_rank, sync, get_module,
 
         train_sampler.set_epoch(epoch)
 
-        print('Starting Epoch {}'.format(epoch + 1))
+        print('Starting Epoch {}'.format(epoch))
 
         # loss sum for epoch
         epoch_total_seg = 0
@@ -305,7 +305,7 @@ def train(args, global_rank, sync, get_module,
         #  Train step
         # ------------------
         for step, data in enumerate(dataloader):
-            curr_steps = epoch * len(dataloader) + step + 1
+            curr_steps = epoch * len(dataloader) + step
 
             model.train()
 
@@ -330,7 +330,7 @@ def train(args, global_rank, sync, get_module,
             #  Log Progress (for certain steps)
             # --------------
             if step % args.log_interval == 0 and global_rank == 0:
-                print(f"[Epoch {epoch + 1}/{args.n_epochs}] [Batch {step + 1}/{len(dataloader)}] "
+                print(f"[Epoch {epoch}/{args.n_epochs - 1}] [Batch {step}/{len(dataloader)}] "
                     f"[Total Loss {loss:.3f}]"
                     f"[Pixel-scale Loss {weighted_loss_seg:.3e}]"
                     f"[Edge Loss {weighted_loss_edg:.3e}]"
@@ -409,7 +409,7 @@ def train(args, global_rank, sync, get_module,
                 epoch_val_loss_avg = 0
                 best_val_loss_avg = 0
 
-            print(f"[Epoch {epoch + 1}/{args.n_epochs}]"
+            print(f"[Epoch {epoch}/{args.n_epochs - 1}]"
                     f"[Epoch Total Loss {epoch_avg_model:.3f}]"
                     f"[Epoch Pixel-scale Loss {epoch_avg_seg:.3e}]"
                     f"[Epoch Edge Loss {epoch_avg_edg:.3e}]"
