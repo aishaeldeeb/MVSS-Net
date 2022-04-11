@@ -41,7 +41,7 @@ class DeepfakeDataset(Dataset):
 
         return
 
-    def __init__(self, paths_file, image_size, n_c_samples = None, val = False):
+    def __init__(self, paths_file, image_size, id, n_c_samples = None, val = False):
         self.image_size = image_size
 
         self.n_c_samples = n_c_samples
@@ -53,28 +53,49 @@ class DeepfakeDataset(Dataset):
         self.edge_image_paths = []
         self.labels = []
         
-        distribution = dict()
-        n_max = 0
+        if ('cond' not in paths_file):
+            distribution = dict()
+            n_max = 0
 
-        with open(paths_file, 'r') as f:
-            lines = f.readlines()
-            for l in lines:
-                parts = l.rstrip().split(' ')
-                input_image_path = parts[0]
-                mask_image_path = parts[1]
-                edge_image_path = parts[2]
-                label_str = parts[3]
+            with open(paths_file, 'r') as f:
+                lines = f.readlines()
+                for l in lines:
+                    parts = l.rstrip().split(' ')
+                    input_image_path = parts[0]
+                    mask_image_path = parts[1]
+                    edge_image_path = parts[2]
+                    label_str = parts[3]
 
-                # add to distribution
-                if (label_str not in distribution):
-                    distribution[label_str] = [(input_image_path, mask_image_path,edge_image_path)]
-                else:
-                    distribution[label_str].append((input_image_path, mask_image_path,edge_image_path))
+                    # add to distribution
+                    if (label_str not in distribution):
+                        distribution[label_str] = [(input_image_path, mask_image_path,edge_image_path)]
+                    else:
+                        distribution[label_str].append((input_image_path, mask_image_path,edge_image_path))
 
-                if (len(distribution[label_str]) > n_max):
-                    n_max = len(distribution[label_str])
+                    if (len(distribution[label_str]) > n_max):
+                        n_max = len(distribution[label_str])
 
-        self.sampling(distribution, n_max)
+            self.sampling(distribution, n_max)
+
+            # save final 
+            save_path = 'cond_paths_file_' + str(id) + ('_train' if not val else '_val') + '.txt'
+            with open(save_path, 'w') as f:
+                for i in range(len(self.input_image_paths)):
+                    f.write(self.input_image_paths[i] + ' ' + self.mask_image_paths[i] + ' ' + self.edge_image_paths[i] + ' ' + str(self.labels[i]) + '\n')
+
+            print('Final paths file (%s) for %s saved to %s' % (('train' if not val else 'val'), str(id), save_path))
+
+        else:
+            print('Read from previous saved paths file %s' % (paths_file))
+
+            with open(paths_file, 'r') as f:
+                lines = f.readlines()
+                for l in lines:
+                    parts = l.rstrip().split(' ')
+                    self.input_image_paths.append(parts[0])
+                    self.mask_image_paths.append(parts[1])
+                    self.edge_image_paths.append(parts[2])
+                    self.labels.append(int(parts[3]))
 
         # ----------
         #  TODO: Transforms for data augmentation (more augmentations should be added)

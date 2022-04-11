@@ -137,6 +137,7 @@ def init_dataset(args, global_rank, world_size, val = False):
     
     dataset = DeepfakeDataset((args.paths_file if not val else args.val_paths_file),
                               args.image_size,
+                              args.id,
                               (args.n_c_samples if not val else args.val_n_c_samples),
                               val)
 
